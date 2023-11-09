@@ -267,11 +267,13 @@ xxx]]>
         Additionally, registries can be proposed by any third-party vendor or similar interested party, which can contain any of the following:</t>
         <ul>
           <li>Any subset of the entries from any other existing registry, in any order</li>
-          <li>Versions of the entries in any other registry with the same field value but different field values</li>
+          <li>Versions of the entries in any other registry with the same field name but a different field value</li>
           <li>Vendor specific entries which are inappropriate for general use</li>
         </ul>
         <t>
         Thus different vendors can propose their own registries which include only field strings that they use - this allows those vendors to minimize the size of the static table to only the minimal set of field names and values that are appropriate to their business, and which are possibly recognized only by their own client and server software. These vendor-defined registries MUST have a naming format of <strong>QPACK Static Table Variant nnn</strong> where '<strong>nnn</strong>' represents any three digit number from 200 to 999.</t>
+        <t>
+        The publication of vendor-defined registries is at the discretion of IANA. See <xref target="IANA" format="default"/> for more details.</t>
       </section>
     </section>
 
@@ -285,8 +287,8 @@ xxx]]>
       <t>
       The <strong>qpack_static_table_version</strong> TLS extension is a structure which represents the following</t>
       <ul>
-        <li>When sent in a request from the client to the server, it represents one or more registry Variants and Lengths supported by the client.</li>
-        <li>When sent in a response from the server to the client, it represents the single negotiated Variant and Length from the list sent by the client that will be used by both client and server.</li>
+        <li>When sent in a request from the client to the server, it represents one or more registry Variant/Length combinations supported by the client.</li>
+        <li>When sent in a response from the server to the client, it represents the single negotiated Variant/Length combination from the list sent by the client that will be used by both client and server.</li>
       </ul>
       <t>
       The <strong>qpack_static_table_version</strong> TLS extension is OPTIONAL and MAY be sent by either client or server or both or neither. Rules for how its existence or absence should be handled are described below.</t>
@@ -296,34 +298,34 @@ xxx]]>
         <sourcecode>
           <![CDATA[
 struct {
-    uint8  StaticTableSupportedCount;
-    struct StaticTableSupportedArray[1...99];
-} qpack_static_table_version;
-
-struct {
     uint8 StaticTableSupportedVariant;
     uint8 StaticTableSupportedLength;
-} StaticTableSupportedArray;]]>
+} StaticTableSupportedArray;
+
+struct {
+    uint8  StaticTableSupportedCount;
+    struct StaticTableSupportedArray[1...99];
+} qpack_static_table_version;]]>
         </sourcecode>
       </figure>
       <t>
-      The <strong>StaticTableSupportedCount</strong> field specifies the number of entries in StaticTableSupportedArray. When passed in a request from a client to a server, it MUST have a value from 1 to 99 inclusive; any other value is invalid and the server MUST treat this as if a single entry in the StaticTableSupportedArray array was passed by the sender with StaticTableSupportedVariant having a value of 1 and StaticTableSupportedLength having a value of 99. When passed in a response from a server to a client, it MUST have a value of 1.</t>
+      The <strong>StaticTableSupportedCount</strong> field specifies the number of entries in <strong>StaticTableSupportedArray</strong>. When passed in a request from a client to a server, it MUST have a value from 1 to 99 inclusive; any other value is invalid and the server MUST treat this as if a single entry in the StaticTableSupportedArray array was passed by the sender with StaticTableSupportedVariant having a value of 1 and StaticTableSupportedLength having a value of 99. When passed in a response from a server to a client, it MUST have a value of 1.</t>
       <t>
-      The following specifications apply to each entry in StaticTableSupportedArray when passed in a request from a client to a server:</t>
+      The following specifications apply to each entry in <strong>StaticTableSupportedArray</strong> when passed in a request from a client to a server:</t>
       <ul>
-        <li>The <strong>StaticTableSupportedVariant</strong> field must be a positive integer and indicates client support for that Variant registry. A negative value or a value of 0 is invalid and the server MUST ignore that StaticTableSupportedArray array entry.</li>
-        <li>The <strong>StaticTableSupportedLength</strong> field must be a positive integer. A negative value or a value of 0 is invalid and the server MUST ignore that StaticTableSupportedArray array entry. A value that is lower than the current length of the registry Variant identified by the StaticTableSupportedVariant field (as known by the server) is valid; this allows a client which may have very limited memory and/or which expects to send/receive only a few known headers to specify a low Length. For example, a client could pass <strong>1;30</strong>, indicating that they support only the first 30 entries in the <strong>QPACK Static Table Variant 1</strong> registry and any other header lines must be specified in the dynamic table.</li>
+        <li>The <strong>StaticTableSupportedVariant</strong> field must be a positive integer and indicates client support for that Variant registry. A negative value or a value of 0 is invalid and the server MUST ignore that <strong>StaticTableSupportedArray</strong> array entry.</li>
+        <li>The <strong>StaticTableSupportedLength</strong> field must be a positive integer. A negative value or a value of 0 is invalid and the server MUST ignore that <strong>StaticTableSupportedArray</strong> array entry. A value that is lower than the current length of the registry Variant identified by the <strong>StaticTableSupportedVariant</strong> field (as known by the server) is valid; this allows a client which may have very limited memory and/or which expects to send/receive only a few known headers to specify a low Length. For example, a client could pass <strong>1;30</strong>, indicating that they support only the first 30 entries in the <strong>QPACK Static Table Variant 1</strong> registry and any other header lines must be specified in the dynamic table.</li>
       </ul>
       <t>
-      The qpack_static_table_version extension MAY be passed by a client to a server in the ClientHello, to indicate one or more registry Variants and the associated Length of each Variant that that the client supports. If the qpack_static_table_version extension is not present in the ClientHello, the server MUST assume that the client supports <strong>QPACK Static Table Variant 1</strong> up to 99 entries.</t>
+      The <strong>qpack_static_table_version</strong> extension MAY be passed by a client to a server in the ClientHello, to indicate one or more registry Variants and the associated Length of each Variant that that the client supports. If the <strong>qpack_static_table_version</strong> extension is not present in the ClientHello, the server MUST assume that the client supports <strong>QPACK Static Table Variant 1</strong> up to 99 entries.</t>
       <t>
-      If the qpack_static_table_version extension is not passed by a client in the ClientHello, the server MUST NOT pass the qpack_static_table_version extension in the ServerHello.</t>
+      If the <strong>qpack_static_table_version</strong> extension is not passed by a client in the ClientHello, the server MUST NOT pass the <strong>qpack_static_table_version</strong> extension in the ServerHello, and MUST use <strong>QPACK Static Table Variant 1</strong> up to 99 entries.</t>
       <t>
-      If the ClientHello includes the qpack_static_table_version extension, the server MAY respond in the ServerHello with its own copy of the qpack_static_table_version extension, which MUST specify a StaticTableSupportedCount value of 1 and MUST contain only a single entry in the StaticTableSupportedArray array. This returned entry MUST match one of the entries passed in the client's qpack_static_table_version extension, indicating the server's preferred choice of registry.</t>
+      If the ClientHello includes the <strong>qpack_static_table_version</strong> extension, the server MAY respond in the ServerHello with its own copy of the <strong>qpack_static_table_version</strong> extension, which MUST specify a <strong>StaticTableSupportedCount</strong> value of 1 and MUST contain only a single entry in the <strong>StaticTableSupportedArray</strong> array. This returned entry MUST match one of the entries passed in the client's <strong>qpack_static_table_version</strong> extension, indicating the server's preferred choice of registry.</t>
       <t>
-      If either the ClientHello or the ServerHello do not include the qpack_static_table_version extension, or if an invalid value is specified for any of its component fields, then both client and server MUST fall back to use <strong>QPACK Static Table Variant 1</strong> up to 99 entries.</t>
+      If either the ClientHello or the ServerHello do not include the <strong>qpack_static_table_version</strong> extension, or if an invalid value is specified for any of its component fields, then both client and server MUST fall back to use <strong>QPACK Static Table Variant 1</strong> up to 99 entries.</t>
       <t>
-      If the client passes the qpack_static_table_version extension with one or more valid values and the server responds with a single valid value as noted above, the client MUST use that value. Note that the chosen Variant and Length may be separately derived from either client or server. See example 5 in <xref target="examples"/> for an example of this.</t>
+      If the client passes the <strong>qpack_static_table_version extension</strong> with one or more valid values and the server responds with a single valid value as noted above, the client MUST use that value. Note that the chosen Variant and Length may be separately derived from either client or server. See example 5 in <xref target="examples"/> for an example of this.</t>
       <t>
       Sample pseudocode processing for client and server:</t>
       <figure>

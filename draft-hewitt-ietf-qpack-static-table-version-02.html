@@ -29,7 +29,7 @@
     wcwidth 0.2.8
     weasyprint 60.1
 -->
-<link href="/usr/src/app/tmp/e389a160-3842-4e8c-942c-9bc07a5cbfcd/draft-hewitt-ietf-qpack-static-table-version-02.xml" rel="alternate" type="application/rfc+xml">
+<link href="/usr/src/app/tmp/1a8900bb-e9dc-4919-b677-cc1f58056b09/draft-hewitt-ietf-qpack-static-table-version-02.xml" rel="alternate" type="application/rfc+xml">
 <link href="#copyright" rel="license">
 <style type="text/css">/*
 
@@ -1625,13 +1625,15 @@ xxx
 <ul class="normal">
 <li class="normal" id="section-4.2-2.1">Any subset of the entries from any other existing registry, in any order<a href="#section-4.2-2.1" class="pilcrow">¶</a>
 </li>
-          <li class="normal" id="section-4.2-2.2">Versions of the entries in any other registry with the same field value but different field values<a href="#section-4.2-2.2" class="pilcrow">¶</a>
+          <li class="normal" id="section-4.2-2.2">Versions of the entries in any other registry with the same field name but a different field value<a href="#section-4.2-2.2" class="pilcrow">¶</a>
 </li>
           <li class="normal" id="section-4.2-2.3">Vendor specific entries which are inappropriate for general use<a href="#section-4.2-2.3" class="pilcrow">¶</a>
 </li>
         </ul>
 <p id="section-4.2-3">
         Thus different vendors can propose their own registries which include only field strings that they use - this allows those vendors to minimize the size of the static table to only the minimal set of field names and values that are appropriate to their business, and which are possibly recognized only by their own client and server software. These vendor-defined registries MUST have a naming format of <strong>QPACK Static Table Variant nnn</strong> where '<strong>nnn</strong>' represents any three digit number from 200 to 999.<a href="#section-4.2-3" class="pilcrow">¶</a></p>
+<p id="section-4.2-4">
+        The publication of vendor-defined registries is at the discretion of IANA. See <a href="#IANA" class="auto internal xref">Section 8</a> for more details.<a href="#section-4.2-4" class="pilcrow">¶</a></p>
 </section>
 </div>
 </section>
@@ -1653,9 +1655,9 @@ xxx
 <p id="section-6-1">
       The <strong>qpack_static_table_version</strong> TLS extension is a structure which represents the following<a href="#section-6-1" class="pilcrow">¶</a></p>
 <ul class="normal">
-<li class="normal" id="section-6-2.1">When sent in a request from the client to the server, it represents one or more registry Variants and Lengths supported by the client.<a href="#section-6-2.1" class="pilcrow">¶</a>
+<li class="normal" id="section-6-2.1">When sent in a request from the client to the server, it represents one or more registry Variant/Length combinations supported by the client.<a href="#section-6-2.1" class="pilcrow">¶</a>
 </li>
-        <li class="normal" id="section-6-2.2">When sent in a response from the server to the client, it represents the single negotiated Variant and Length from the list sent by the client that will be used by both client and server.<a href="#section-6-2.2" class="pilcrow">¶</a>
+        <li class="normal" id="section-6-2.2">When sent in a response from the server to the client, it represents the single negotiated Variant/Length combination from the list sent by the client that will be used by both client and server.<a href="#section-6-2.2" class="pilcrow">¶</a>
 </li>
       </ul>
 <p id="section-6-3">
@@ -1667,37 +1669,37 @@ xxx
 <pre>
 
 struct {
-    uint8  StaticTableSupportedCount;
-    struct StaticTableSupportedArray[1...99];
-} qpack_static_table_version;
-
-struct {
     uint8 StaticTableSupportedVariant;
     uint8 StaticTableSupportedLength;
 } StaticTableSupportedArray;
+
+struct {
+    uint8  StaticTableSupportedCount;
+    struct StaticTableSupportedArray[1...99];
+} qpack_static_table_version;
 </pre>
 </div>
 <figcaption><a href="#figure-2" class="selfRef">Figure 2</a></figcaption></figure>
 <p id="section-6-6">
-      The <strong>StaticTableSupportedCount</strong> field specifies the number of entries in StaticTableSupportedArray. When passed in a request from a client to a server, it MUST have a value from 1 to 99 inclusive; any other value is invalid and the server MUST treat this as if a single entry in the StaticTableSupportedArray array was passed by the sender with StaticTableSupportedVariant having a value of 1 and StaticTableSupportedLength having a value of 99. When passed in a response from a server to a client, it MUST have a value of 1.<a href="#section-6-6" class="pilcrow">¶</a></p>
+      The <strong>StaticTableSupportedCount</strong> field specifies the number of entries in <strong>StaticTableSupportedArray</strong>. When passed in a request from a client to a server, it MUST have a value from 1 to 99 inclusive; any other value is invalid and the server MUST treat this as if a single entry in the StaticTableSupportedArray array was passed by the sender with StaticTableSupportedVariant having a value of 1 and StaticTableSupportedLength having a value of 99. When passed in a response from a server to a client, it MUST have a value of 1.<a href="#section-6-6" class="pilcrow">¶</a></p>
 <p id="section-6-7">
-      The following specifications apply to each entry in StaticTableSupportedArray when passed in a request from a client to a server:<a href="#section-6-7" class="pilcrow">¶</a></p>
+      The following specifications apply to each entry in <strong>StaticTableSupportedArray</strong> when passed in a request from a client to a server:<a href="#section-6-7" class="pilcrow">¶</a></p>
 <ul class="normal">
-<li class="normal" id="section-6-8.1">The <strong>StaticTableSupportedVariant</strong> field must be a positive integer and indicates client support for that Variant registry. A negative value or a value of 0 is invalid and the server MUST ignore that StaticTableSupportedArray array entry.<a href="#section-6-8.1" class="pilcrow">¶</a>
+<li class="normal" id="section-6-8.1">The <strong>StaticTableSupportedVariant</strong> field must be a positive integer and indicates client support for that Variant registry. A negative value or a value of 0 is invalid and the server MUST ignore that <strong>StaticTableSupportedArray</strong> array entry.<a href="#section-6-8.1" class="pilcrow">¶</a>
 </li>
-        <li class="normal" id="section-6-8.2">The <strong>StaticTableSupportedLength</strong> field must be a positive integer. A negative value or a value of 0 is invalid and the server MUST ignore that StaticTableSupportedArray array entry. A value that is lower than the current length of the registry Variant identified by the StaticTableSupportedVariant field (as known by the server) is valid; this allows a client which may have very limited memory and/or which expects to send/receive only a few known headers to specify a low Length. For example, a client could pass <strong>1;30</strong>, indicating that they support only the first 30 entries in the <strong>QPACK Static Table Variant 1</strong> registry and any other header lines must be specified in the dynamic table.<a href="#section-6-8.2" class="pilcrow">¶</a>
+        <li class="normal" id="section-6-8.2">The <strong>StaticTableSupportedLength</strong> field must be a positive integer. A negative value or a value of 0 is invalid and the server MUST ignore that <strong>StaticTableSupportedArray</strong> array entry. A value that is lower than the current length of the registry Variant identified by the <strong>StaticTableSupportedVariant</strong> field (as known by the server) is valid; this allows a client which may have very limited memory and/or which expects to send/receive only a few known headers to specify a low Length. For example, a client could pass <strong>1;30</strong>, indicating that they support only the first 30 entries in the <strong>QPACK Static Table Variant 1</strong> registry and any other header lines must be specified in the dynamic table.<a href="#section-6-8.2" class="pilcrow">¶</a>
 </li>
       </ul>
 <p id="section-6-9">
-      The qpack_static_table_version extension MAY be passed by a client to a server in the ClientHello, to indicate one or more registry Variants and the associated Length of each Variant that that the client supports. If the qpack_static_table_version extension is not present in the ClientHello, the server MUST assume that the client supports <strong>QPACK Static Table Variant 1</strong> up to 99 entries.<a href="#section-6-9" class="pilcrow">¶</a></p>
+      The <strong>qpack_static_table_version</strong> extension MAY be passed by a client to a server in the ClientHello, to indicate one or more registry Variants and the associated Length of each Variant that that the client supports. If the <strong>qpack_static_table_version</strong> extension is not present in the ClientHello, the server MUST assume that the client supports <strong>QPACK Static Table Variant 1</strong> up to 99 entries.<a href="#section-6-9" class="pilcrow">¶</a></p>
 <p id="section-6-10">
-      If the qpack_static_table_version extension is not passed by a client in the ClientHello, the server MUST NOT pass the qpack_static_table_version extension in the ServerHello.<a href="#section-6-10" class="pilcrow">¶</a></p>
+      If the <strong>qpack_static_table_version</strong> extension is not passed by a client in the ClientHello, the server MUST NOT pass the <strong>qpack_static_table_version</strong> extension in the ServerHello, and MUST use <strong>QPACK Static Table Variant 1</strong> up to 99 entries.<a href="#section-6-10" class="pilcrow">¶</a></p>
 <p id="section-6-11">
-      If the ClientHello includes the qpack_static_table_version extension, the server MAY respond in the ServerHello with its own copy of the qpack_static_table_version extension, which MUST specify a StaticTableSupportedCount value of 1 and MUST contain only a single entry in the StaticTableSupportedArray array. This returned entry MUST match one of the entries passed in the client's qpack_static_table_version extension, indicating the server's preferred choice of registry.<a href="#section-6-11" class="pilcrow">¶</a></p>
+      If the ClientHello includes the <strong>qpack_static_table_version</strong> extension, the server MAY respond in the ServerHello with its own copy of the <strong>qpack_static_table_version</strong> extension, which MUST specify a <strong>StaticTableSupportedCount</strong> value of 1 and MUST contain only a single entry in the <strong>StaticTableSupportedArray</strong> array. This returned entry MUST match one of the entries passed in the client's <strong>qpack_static_table_version</strong> extension, indicating the server's preferred choice of registry.<a href="#section-6-11" class="pilcrow">¶</a></p>
 <p id="section-6-12">
-      If either the ClientHello or the ServerHello do not include the qpack_static_table_version extension, or if an invalid value is specified for any of its component fields, then both client and server MUST fall back to use <strong>QPACK Static Table Variant 1</strong> up to 99 entries.<a href="#section-6-12" class="pilcrow">¶</a></p>
+      If either the ClientHello or the ServerHello do not include the <strong>qpack_static_table_version</strong> extension, or if an invalid value is specified for any of its component fields, then both client and server MUST fall back to use <strong>QPACK Static Table Variant 1</strong> up to 99 entries.<a href="#section-6-12" class="pilcrow">¶</a></p>
 <p id="section-6-13">
-      If the client passes the qpack_static_table_version extension with one or more valid values and the server responds with a single valid value as noted above, the client MUST use that value. Note that the chosen Variant and Length may be separately derived from either client or server. See example 5 in <a href="#examples" class="auto internal xref">Section 7</a> for an example of this.<a href="#section-6-13" class="pilcrow">¶</a></p>
+      If the client passes the <strong>qpack_static_table_version extension</strong> with one or more valid values and the server responds with a single valid value as noted above, the client MUST use that value. Note that the chosen Variant and Length may be separately derived from either client or server. See example 5 in <a href="#examples" class="auto internal xref">Section 7</a> for an example of this.<a href="#section-6-13" class="pilcrow">¶</a></p>
 <p id="section-6-14">
       Sample pseudocode processing for client and server:<a href="#section-6-14" class="pilcrow">¶</a></p>
 <span id="name-client-processing"></span><figure id="figure-3">
