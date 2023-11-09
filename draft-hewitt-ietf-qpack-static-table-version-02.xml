@@ -1,0 +1,572 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<?xml-model href="rfc7991bis.rnc"?>  <!-- Required for schema validation and schema-aware editing -->
+<!-- <?xml-stylesheet type="text/xsl" href="rfc2629.xslt" ?> -->
+<!-- This third-party XSLT can be enabled for direct transformations in XML processors, including most browsers -->
+
+
+<!DOCTYPE rfc [
+  <!ENTITY nbsp    "&#160;">
+  <!ENTITY zwsp   "&#8203;">
+  <!ENTITY nbhy   "&#8209;">
+  <!ENTITY wj     "&#8288;">
+]>
+<!-- If further character entities are required then they should be added to the DOCTYPE above.
+     Use of an external entity file is not recommended. -->
+
+<rfc
+  xmlns:xi="http://www.w3.org/2001/XInclude"
+  category="std"
+  docName="draft-hewitt-ietf-qpack-static-table-version-02"
+  ipr="trust200902"
+  obsoletes=""
+  updates=""
+  submissionType="IETF"
+  xml:lang="en"
+  version="3">
+
+  <front>
+    <title abbrev="QSTV TLS extension">The qpack_static_table_version TLS extension</title>
+
+    <seriesInfo name="Internet-Draft" value="draft-hewitt-ietf-qpack-static-table-version-02"/>
+
+    <author fullname="Rory Hewitt" initials="R" surname="Hewitt">
+      <organization>Akamai Technologies Inc.</organization>
+      <address>
+        <email>rhewitt@akamai.com</email>
+      </address>
+    </author>
+
+    <date year="2023"/>
+    <!-- On draft subbmission:
+         * If only the current year is specified, the current day and month will be used.
+         * If the month and year are both specified and are the current ones, the current day will
+           be used
+         * If the year is not the current one, it is necessary to specify at least a month and day="1" will be used.
+    -->
+
+    <area>General</area>
+    <workgroup>Internet Engineering Task Force</workgroup>
+    <!-- "Internet Engineering Task Force" is fine for individual submissions.  If this element is
+          not present, the default is "Network Working Group", which is used by the RFC Editor as
+          a nod to the history of the RFC Series. -->
+
+    <keyword>qpack static table version http/3 h3 tls extension</keyword>
+
+    <abstract>
+      <t>This document specifies a new "qpack_static_table_version" TLS extension to enable clients and servers to agree upon the version of the HTTP/3 QPACK Static Table to use for communications between them. It also defines a new IANA registry to be used for documenting and publishing the entries in the QPACK static table.</t>
+    </abstract>
+
+    <note removeInRFC="true">
+      <name>About This Document</name>
+      <t>
+        Status information for this document may be found at <eref target="https://datatracker.ietf.org/doc/draft-hewitt-ietf-qpack-static-table-version/"/>.
+      </t>
+      <t>
+        Discussion of this document takes place on the
+        HTTP Working Group mailing list (<eref target="mailto:ietf-http-wg@w3.org"/>),
+        which is archived at <eref target="https://lists.w3.org/Archives/Public/ietf-http-wg/"/>.
+        Working Group information can be found at <eref target="https://httpwg.org/"/>.
+      </t>
+      <t>Source for this draft and an issue tracker can be found at
+        <eref target="https://github.com/roryhewitt/qpack_static_table_version"/>.</t>
+    </note>
+
+  </front>
+
+  <middle>
+
+    <section anchor="introduction">
+      <name>Introduction</name>
+      <t>
+      HTTP/3 uses QPACK <xref target="RFC9204"/> for compression of the header and trailer sections.</t>
+      <t>
+      QPACK reuses core concepts from the HPACK algorithm used for HTTP/2, but as noted in its design "[...]is redesigned to allow correctness in the presence of out-of-order delivery, with flexibility for implementations to balance between resilience against head-of-line blocking and optimal compression ratio."</t>
+      <t>
+      A central feature of QPACK is the use of a 'static table' which contains a predefined list of frequently-used field names or field name/value combinations (generically "field strings"), each of which is identified by a unique, unchanging index in the table. To minimize over-the-wire bytes, clients and servers can pass this index rather than the field string itself in the header section of the request or reponse. Less frequently-used field strings are defined as ASCII text in the QPACK 'dynamic table'. Because of the optimal compression, defining field strings in the static table is significantly desirable over passing them in the dynamic table.</t>
+      <t>
+      When the static table was originally defined, the entries it contained were calculated by determining the relative frequency with which each field string was found in a representative sampling of web traffic. However, as new HTTP fields become more frequently-used over time, it makes sense that they be added as additional entries to the static table to retain the high level of compression.</t>
+      <t>
+      This specification defines a new TLS extension which can be passed by both client and server to identify and agree on the version (size) of the static table that they will both use. Because the size of the static table must be known prior to any HTTP requests passing between the client and server, this information must be passed during the TLS handshake.</t>
+      <t>
+      This specification also defines a new IANA registry where the entries in the QPACK static table will be published and updated. Additional related registries will be created over time.</t>
+
+      <section anchor="requirements">
+        <name>Requirements Language</name>
+        <t>The key words "MUST", "MUST NOT", "REQUIRED", "SHALL",
+          "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT
+          RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be
+          interpreted as described in BCP 14 <xref target="RFC2119"/>
+          <xref target="RFC8174"/> when, and only when, they appear in
+          all capitals, as shown here.</t>
+        <t>
+        The following terms are used in this document:
+        </t>
+        <ul>
+          <li><strong>HTTP fields</strong>: Metadata sent as part of an HTTP message. The term encompasses both header and trailer fields. Colloquially, the term "headers" has often been used to refer to HTTP header fields and trailer fields; this document uses "fields" for generality.</li>
+          <li><strong>HTTP field line</strong>: A name-value pair sent as part of an HTTP field section. See Sections 6.3 and 6.5 of <xref target="RFC9110"/>.</li>
+          <li><strong>HTTP field value</strong>: Data associated with a field name, composed from all field line values with that field name in that section, concatenated together with comma separators.</li>
+          <li><strong>HTTP field string</strong>: A field name or field name/value combination, as stored in the QPACK static table.</li>
+        </ul>
+        <t>
+        Note that QPACK is a name, not an abbreviation.</t>
+      </section>
+
+    </section>
+
+    <section anchor="background">
+      <name>QPACK Static Table Background</name>
+      <t>The original QPACK static table <xref target="RFC9204"/> contains 99 entries (starting at entry 0, ending at entry 98), as follows:</t>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Entry</th>
+            <th>Value</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>0 (first entry)</td>
+            <td>:authority</td>
+            <td>Field name only</td>
+          </tr>
+          <tr>
+            <td>1</td>
+            <td>:path&nbsp;&nbsp;&nbsp;/</td>
+            <td>Field name/value combination</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>Age&nbsp;&nbsp;&nbsp;0</td>
+            <td>Field name/value combination</td>
+          </tr>
+          <tr>
+            <td colspan="3">...2 - 97...</td>
+          </tr>
+          <tr>
+            <td>98 (last entry)</td>
+            <td>x-frame-options&nbsp;&nbsp;&nbsp;sameorigin</td>
+            <td>Field name/value combination</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <t>
+      The table was generated by analyzing actual Internet traffic in 2018 and including the most common header fields, after filtering out some unsupported and non-standard values. Due to this methodology, some of the entries may be inconsistent or appear multiple times with similar but not identical values. The order of the entries is optimized to encode the most common header fields with the smallest number of bytes.</t>
+      <t>
+      For example, a request which nominally passes the following headers:</t>
+      <ul>
+        <li><strong>:authority: www.example.com</strong> (entry 0 in static table as field name only)</li>
+        <li><strong>:method: GET</strong> (entry 17 in static table as field name/value)</li>
+        <li><strong>path: /</strong> (entry 1 in static table as field name/value)</li>
+        <li><strong>cookie: cookie1=abc;cookie2=def</strong> (entry 5 in static table as field name only)</li>
+        <li><strong>accept: */*</strong> (entry 29 in static table as field name/value)</li>
+        <li><strong>myheader: xxx</strong> (not specified in static table)</li>
+      </ul>
+      <t>
+      would instead pass the following in a header 'blob' (low-level technical formatting elided and new lines added for comprehension):</t>
+      <figure>
+        <name>Header blob consisting of references to static and dynamic table entries</name>
+        <sourcecode>
+          <![CDATA[
+0
+[offset-to-:authority-value]
+17
+1
+5
+[offset-to-cookie-value]
+29
+[offset-to-myheader-name]
+[offset-to-myheader-value]
+www.example.com
+cookie1=abc;cookie2=def
+myheader
+xxx]]>
+        </sourcecode>
+      </figure>
+      <t>
+      Thus many headers (e.g. accept: */*) can be passed as simple static table indexes. Where the static table entry doesn't include a field value (e.g. :authority), there will be an offset to the related value.</t>
+    </section>
+    <section anchor="problems">
+      <name>QPACK Static Table Problems</name>
+      <t>
+      The QPACK static table functionality, whilst elegant and highly efficient, has a number of problems:</t>
+      <ol>
+        <li>The headers included in the static table may have been the most frequently used in 2018, but that was (as of the writing of this RFC) five years ago, and things change - new headers are brought into use and find favor and become very common - more common than some of the entries in the static table</li>
+        <li>Some of the values in the static table are incorrect - for example, entries 73 and 74 are both for the <strong>access-control-allow-credentials</strong> field name, but the two values specified (TRUE and FALSE) are both invalid for that field name.</li>
+        <li>It doesn't allow for the fact that some 'micro' clients may not wish to include the entire static table, especially if they either use vendor-specific headers that are not included in the current table or if they only use a small subset of the headers in the table.</li>
+      </ol>
+      <t>
+      Therefore, it makes sense to devise a system to both define variants of the static table (containing more, fewer or different entries), which clients and servers can choose to use and also to define a means for those clients and servers to negotiate the static table they will use - this must clearly occur before any HTTP requests which use the table.</t>
+    </section>
+
+    <section anchor="additions">
+      <name>QPACK Static Table Additions</name>
+      <section anchor="standard_registries">
+        <name>Standard registries</name>
+        <t>
+        Initially, a registry called <strong>QPACK Static Table Variant 1</strong> will be created and maintained by IANA in which the initial QPACK static table will be published. See <xref target="IANA" format="default"/> for   more details.</t>
+        <t>
+        Over time, subsequent related registries using a naming convention of <strong>QPACK Static Table Variant N</strong> (where <strong>N</strong> is an integer incremented by 1 from the prior registry) will be created to contain a re-ordered copy of the table that is defined in the prior registry.</t>
+        <t>
+        Each registry will have two 'attributes' that are used by clients and servers during TLS negotiation - a <strong>Variant</strong> (part of the registry name) and a <strong>Length</strong> (the number of entries in the registry). In this document, a registry may be referred to using the shorthand of "Variant, Length" - for example "1,99".</t>
+        <t>
+        The initial registry (Variant 1) will have 99 entries (Length 99), shorthandedly known as 1,99. These values match the initial value of the QPACK static table as defined in the QPACK RFC <xref target="RFC9204"/>. Every subsequent registry will have a Length value greater than or equal to 99.</t>
+        <t>
+        Periodically (see <xref target="IANA" format="default"/> for proposed periods), IESG designated experts will re-sample actual internet traffic and as new field strings are found to have become more prevalent than the current last entry in the registry with the highest Variant, the new field strings will be ordered by prevalence with one another (if more than one field string) and appended as new entries to that registry.</t>
+        <t>
+        Periodically (see <xref target="IANA" format="default"/> for proposed periods), a new <strong>QPACK Static Table Variant N</strong> registry will be created (where N is incremented by 1 from the prior registry Variant). This registry will contain all the entries in the prior registry Variant, but they will all be re-ordered, to ensure that the most commonly-found header lines are near the start of the table. When a new <strong>QPACK Static Table Variant N</strong> registry is published, all prior registries are 'locked' and will not be changed; new entries will not be appended to them.</t>
+        <t>
+        Thus at any time, there may be multiple concurrently-published QPACK Static Table registries, each with a different Variant.</t>
+        <section anchor="hypothetical_example">
+          <name>Example</name>
+          <t>
+          <strong>Note that with the exception of the initial length of the QPACK Static Table Variant 1 registry, this section is hypothetical</strong></t>
+          <t>
+          Initially the <strong>QPACK Static Table Variant 1</strong> registry is published and contains 99 entries. This is the table that is defined in the QPACK RFC.</t>
+          <t>
+          After a certain period of time, web traffic is re-sampled and it is found that 12 new field strings exist which are more common than "x-frame-options: sameorigin" (entry 99 in the Variant 1 registry). These 12 field strings are ordered by prevalence relative to each other and appended as entries 100-111 to the <strong>QPACK Static Table Variant 1</strong> registry.</t>
+          <t>
+          After another period of time, internet traffic is re-sampled again and it is found that 5 new field strings exist which are more common than entry 111 in the Variant 1 registry. Again, these 5 field strings are ordered by prevalence relative to each other and appended to the <strong>QPACK Static Table Variant 1</strong> registry.</t>
+          <t>
+          At the same time, a new registry, <strong>QPACK Static Table Variant 2</strong>, is published. This registry contains all 116 entries from the <strong>QPACK Static Table Variant 1</strong> registry, re-ordered in order of total prevalence. The <strong>QPACK Static Table Variant 1</strong> registry is locked.</t>
+          <t>
+          There are now <strong>two</strong> registries:</t>
+          <ul>
+            <li><strong>QPACK Static Table Variant 1</strong> containing 116 entries: [LOCKED] Entries 0-98 are in the same order as the initial QPACK table. Entries 99-111 are ordered by prevalence with one another, but not with any prevalence relative to entries 0-98. Entries 112-116  are ordered by prevalence with one another but not with any prevalence relative to entries 0-111.</li>
+            <li><strong>QPACK Static Table Variant 2</strong> containing 116 entries: All entries are ordered by prevalence compared to one another.</li>
+          </ul>
+          <t>
+          After a period of time, 3 new field strings exist which are more common than entry 116 in <strong>QPACK Static Table Variant 2</strong>. These 3 field strings are ordered by prevalence relative to each other and appended to the <strong>QPACK Static Table Variant 2</strong> registry.</t>
+          <t>
+          At this point there are still <strong>two</strong> registries: - the Variant 1 registry is locked and the Variant 2 registry has changed:</t>
+          <ul>
+            <li><strong>QPACK Static Table Variant 1</strong> containing 116 entries: [LOCKED] Entries 0-98 are in the same order as the initial QPACK table. Entries 99-111 are ordered by prevalence with one another, but not with any prevalence relative to entries 0-98. Entries 112-116  are ordered by prevalence with one another but not with any prevalence relative to entries 0-111.</li>
+            <li><strong>QPACK Static Table Variant 2</strong> containing 119 entries: Entries 0-116 are ordered by prevalence compared to one another. Entries 117-119 are ordered by prevalence with one another, but not with any prevalence relative to entries 0-116.</li>
+          </ul>
+          <t>
+          After a period of time, 4 new field strings exist which are more common than entry 119 in <strong>QPACK Static Table Variant 2</strong>. These 4 field strings are ordered by prevalence relative to each other and appended to the <strong>QPACK Static Table Variant 2</strong> registry.</t>
+          <t>
+          At the same time, a new registry, <strong>QPACK Static Table Variant 3</strong>, is published. This contains all the entries from the Variant 2 registry, re-ordered in order of total prevalence. The <strong>QPACK Static Table Variant 2</strong> registry is locked.</t>
+          <t>
+          There are now <strong>three</strong> registries:</t>
+          <ul>
+            <li><strong>QPACK Static Table Variant 1</strong> containing 116 entries: [LOCKED] Entries 0-98 are in the same order as the initial QPACK table. Entries 99-111 are ordered by prevalence with one another, but not with any prevalence relative to entries 0-98. Entries 112-116  are ordered by prevalence with one another but not with any prevalence relative to entries 0-111.</li>
+            <li><strong>QPACK Static Table Variant 2</strong> containing 123 entries [LOCKED]: Entries 0-116 are ordered by prevalence compared to one another. Entries 117-119 are ordered by prevalence with one another, but not with any prevalence relative to entries 0-116. Entries 120-123 are ordered by prevalence with one another, but not with any prevalence relative to entries 0-119.</li>
+            <li><strong>QPACK Static Table Variant 3</strong> containing 123 entries: All entries are ordered by prevalence compared to one another.</li>
+          </ul>
+          <t>
+          This process continues, with new header lines periodically being appended to the latest registry Variant and a new registry Variant of the table periodically being created.</t>
+        </section>
+      </section>
+      <section anchor="vendor_registries">
+        <name>Vendor registries</name>
+        <t>
+        Additionally, registries can be proposed by any third-party vendor or similar interested party, which can contain any of the following:</t>
+        <ul>
+          <li>Any subset of the entries from any other existing registry, in any order</li>
+          <li>Versions of the entries in any other registry with the same field value but different field values</li>
+          <li>Vendor specific entries which are inappropriate for general use</li>
+        </ul>
+        <t>
+        Thus different vendors can propose their own registries which include only field strings that they use - this allows those vendors to minimize the size of the static table to only the minimal set of field names and values that are appropriate to their business, and which are possibly recognized only by their own client and server software. These vendor-defined registries MUST have a naming format of <strong>QPACK Static Table Variant 2nn</strong> where '<strong>nn</strong>' represents any two digits - this allows up to 100 vendor-defined registries.</t>
+      </section>
+    </section>
+
+    <section anchor="support">
+      <name>QPACK Static Table support</name>
+        <t>
+        HTTP/3-supporting clients and servers MUST always support <strong>QPACK Static Table Variant 1</strong>. They MAY also support other registry Variants.</t>
+        <t>
+        HTTP/3-supporting clients and servers MUST encode into their software a maximum Length (number of entries) in each supported standard registry Variant. This can be any value from the number of entries when that registry Variant was created up to the number of entries when it was locked due to the creation of a new registry, inclusive. This ensures that if a sender (maliciously or otherwise) specifies that it supports a registry Variant prior to that supported by the receiver, but also specifies a number of entries for that registry Variant that is higher than the maximum value for that Variant as stored by the receiver (for instance, if the sender announces support for Variant 1, with Length 105), the receiver can correctly identify that this is an invalid combination. In this scenario, the receiver MUST ignore the invalid Length field passed by the sender and use the lower of the maximum Length supported by the receiver or 99. See Example 10 in <xref target="examples"/> for an example of this.</t>
+    </section>
+    <section anchor="details">
+      <name>The qpack_static_table_version TLS extension</name>
+      <t>
+      The <strong>qpack_static_table_version</strong> TLS extension is a structure which represents the Variant and Length of the static table(s) supported by the sender. It is OPTIONAL and MAY be sent by either client or server or both or neither.</t>
+      <t>
+      The extension_data for the qpack_static_table_version extension is described below using the syntax defined in <xref target="RFC8446"/>:</t>
+      <figure>
+        <sourcecode>
+          <![CDATA[
+struct {
+    uint8  StaticTableSupportedCount;
+    struct StaticTableSupportedArray[1...99];
+} qpack_static_table_version;
+
+struct {
+    uint8 StaticTableSupportedVariant;
+    uint8 StaticTableSupportedLength;
+} StaticTableSupportedArray;]]>
+        </sourcecode>
+      </figure>
+      <t>
+      The StaticTableSupportedCount field specifies the number of entries in the StaticTableSupportedArray array. It MUST have a value from 1 to 99 inclusive. Any other value is invalid and the receiver MUST treat this as if a single entry in the StaticTableSupportedArray array was passed by the sender with StaticTableSupportedVariant having a value of 1 and StaticTableSupportedLength having a value of 99.</t>
+      <t>
+      The StaticTableSupportedVariant field must be a positive integer and indicates the highest registry Variant supported. A negative value or a value of 0 is invalid and the receiver MUST treat this as if a value of 1 was passed by the sender.</t>
+      <t>
+      The StaticTableSupportedLength field must be a positive integer. A negative value or a value of 0 is invalid and the receiver MUST treat this as if a value of 99 was passed by the sender. A value that is lower than the current length of the registry identified by the StaticTableSupportedVariant field is valid; this allows a client or server which may have very limited memory and/or which expects to send/receive only a few known headers to specify a low Length e.g. 1,30, indicating that they support only the first 30 entries in the <strong>QPACK Static Table Variant 1</strong> registry and any other header lines must be specified in the dynamic table.</t>
+      <t>
+      The qpack_static_table_version extension MAY be passed by a client to a server in the ClientHello, to indicate the Variant/Length of the registry that the client supports. If the qpack_static_table_version extension is not present in the ClientHello, the server MUST assume that the client implicitly supports <strong>QPACK Static Table Variant 1</strong> up to 99 entries.</t>
+      <t>
+      If the ClientHello includes the qpack_static_table_version extension, the server MAY respond in the ServerHello with its own copy of the qpack_static_table_version extension.</t>
+      <t>
+      If either the ClientHello or the ServerHello do not include the qpack_static_table_version extension, or if an invalid value is specified for either of its component fields, then both client and server must fall back to use <strong>QPACK Static Table Variant 1</strong> up to 99 entries.</t>
+      <t>
+      If both the client and the server pass the qpack_static_table_version extension with valid values, the lower Variant and Length MUST be used by both client and server, thus ensuring that both client and server only reference entries in their static table up to the shared maximum length of the registry. Note that the chosen Variant and Length may be separately derived from either client or server. See example 9 in <xref target="examples"/> for an example of this.</t>
+      <t>
+      If either client or server passes a StaticTableSupportedLength field which is higher than the number of entries in the registry indicated by the StaticTableSupportedVariant field, the receiver MUST fall back to using 99 entries (or the maximum Length supported by the receiver if lower than 99) in the registry indicated by the StaticTableSupportedVariant field (or the highest Variant registry supported by the receiver if lower). As noted in <xref target="support"/>, this means that clients and servers must encode into their software a maximum allowed Length for each Variant.</t>
+      <t>
+      Sample pseudocode processing for client and server:</t>
+      <figure>
+        <name>Client processing</name>
+        <sourcecode>
+          <![CDATA[
+Initialize variable CV to supported Variant value
+Initialize variable CL to supported Length value
+Include qpack_static_table_version with values CV,CL in ClientHello
+if (ServerHello does not contain qpack_static_table_version or if qpack_static_table_version contains invalid values) {
+    set CV to 1
+    set CL to lesser of 99 and CL
+} else {
+    save qpack_static_table_version from ServerHello as SV,SL
+    set SL_max to maximum valid entries for specified SV
+    if (SV < CV) {
+        set CV to SV
+    }
+    if (SL < CL) {
+        if (SL > SL_max) {
+            set CL to lesser of 99 and CL
+        } else {
+            set CL to SL
+        }
+    }
+}
+use CV,CL for static table index processing]]>
+        </sourcecode>
+      </figure>
+
+      <figure>
+        <name>Server processing</name>
+        <sourcecode>
+          <![CDATA[
+Initialize variable SV to supported Variant value
+Initialize variable SL to supported Length value
+if (ClientHello does not contain qpack_static_table_version or if qpack_static_table_version contains invalid values) {
+    set SV to 1
+    set SL to lesser of 99 and SL
+} else {
+    save qpack_static_table_version from ClientHello as CV,CL
+    set CL_max to maximum valid entries for specified CV
+    if (CV < SV) {
+        set SV to CV
+    }
+    if (CL < SL) {
+        if (CL > CL_max) {
+            set SL to lesser of 99 and SL
+        } else {
+            set SL to CL
+        }
+    }
+    Include qpack_static_table_version with values SV,SL in ServerHello
+}
+Use SV,SL for static table index processing]]>
+        </sourcecode>
+      </figure>
+    </section>
+    <section anchor="examples">
+      <name>Processing Examples</name>
+      <t>
+      Example published registries (after some time has passed and multiple registries have been created):</t>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Variant</th>
+            <th>Length</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td>116</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>123</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>123</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <t>
+      Example values passed for the qpack_static_table_version:</t>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Example</th>
+            <th>Client Variant/Length passed</th>
+            <th>Server Variant/Length passed</th>
+            <th>Variant/Length used</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td>not passed</td>
+            <td>not passed</td>
+            <td>1,99</td>
+            <td>Neither client nor server passed the extension, so both use the default Variant 1 registry, up to 99 entries.</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>not passed</td>
+            <td>2,116</td>
+            <td>1,99</td>
+            <td>The client did not pass the extension, so both use the default Variant 1 registry, up to 99 entries.</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>1,114</td>
+            <td>not passed</td>
+            <td>1,99</td>
+            <td>The server did not pass the extension, so both use the default Variant 1 registry, up to 99 entries.</td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td>1,99</td>
+            <td>1,116</td>
+            <td>1,99</td>
+            <td>The client passed the same Variant (Variant 1) as server, but a lower Length, so the client Length (99 entries) is used.</td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td>1,116</td>
+            <td>1,101</td>
+            <td>1,101</td>
+            <td>The server passed the same Variant (Variant 1) as the client, but a lower Length, so the server Length (101 entries) is used.</td>
+          </tr>
+          <tr>
+            <td>6</td>
+            <td>1,99</td>
+            <td>2,116</td>
+            <td>1,99</td>
+            <td>The client passed a lower Variant than the server, so the client Variant is used, up to 99 entries.</td>
+          </tr>
+          <tr>
+            <td>7</td>
+            <td>3,123</td>
+            <td>2,116</td>
+            <td>2,116</td>
+            <td>The server passed a lower Variant than the client, so the server Variant is used, up to 116 entries.</td>
+          </tr>
+          <tr>
+            <td>8</td>
+            <td>1,50</td>
+            <td>3,123</td>
+            <td>1,50</td>
+            <td>The client passed a lower Variant than the server, so the client Variant is used, up to only 50 entries.</td>
+          </tr>
+          <tr>
+            <td>9</td>
+            <td>1,99</td>
+            <td>3,80</td>
+            <td>1,80</td>
+            <td>The client passed a lower Variant than the server, so the client Variant is used. The server passed a lower Length than the client, so the server Length (80 entries) is used.</td>
+          </tr>
+          <tr>
+            <td>10</td>
+            <td>1,101</td>
+            <td>3,123</td>
+            <td>1,99</td>
+            <td>The client passed a lower Variant than the server, so the client Variant is used. The client passed an invalidly high Length for the specified Variant, so only 99 entries are used.</td>
+          </tr>
+        </tbody>
+      </table>
+
+
+    </section>
+
+    <section anchor="IANA">
+      <name>IANA Considerations</name>
+      <t>
+      This memo requests that IANA creates a registry for the QPACK static table, to be periodically updated and supserseded by IESG-appointed Designated Expert(s).</t>
+      <t>
+      The registry name is <strong>QPACK Static Table Variant 1</strong> and is part of the <strong>Transport Layer Security (TLS)</strong> registry grouping. The registration policy is <strong>Expert Review</strong>.</t>
+      <t>
+      The registry will contain a copy of the QPACK static table ("table"). Each entry in the table consists of the following three fields:</t>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Type</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Index</td>
+            <td>Unsigned Integer</td>
+            <td>First entry has Index 0, then 1, 2 etc.</td>
+          </tr>
+          <tr>
+            <td>Name</td>
+            <td>String</td>
+            <td>Field name - follows field name validation specified in Section 5.1 of <xref target="RFC9110"/>. Case-insensitive, but per convention, specify in lower-case</td>
+          </tr>
+          <tr>
+            <td>Value</td>
+            <td>String</td>
+            <td>Field value - follows field value validation specified in Section 5.5 of <xref target="RFC9110"/>. Case-sensitive. MAY BE BLANK</td>
+          </tr>
+        </tbody>
+      </table>
+      <t>
+      The initial set of entries in the registry will be copied directly from the entries in the QPACK static table defined in Appendix A in <xref target="RFC9204"/>.</t>
+      <t>
+      As per the technical information in this document, on a periodic basis, the Designated Expert(s) will sample HTTP/3 web traffic and may, as a result, append new entries to the registry. It is suggested that the sampling process occurs approximately <strong>once every year</strong>, but the decision of whether to append new entries to the registry may occur at a slower rate, since it depends entirely on the rate at which new fields become sufficiently prevalent in HTTP/3 web traffic.</t>
+      <t>
+      On a separate periodic basis, a new registry will be created using the same format as the above registry, but will be named <strong>QPACK Static Table Variant N</strong> (where <strong>N</strong> is an integer incremented by 1 from the prior registry). This new registry will be a re-ordered copy of the prior registry. When a new QPACK Static Table registry is created, all prior registry versions must be locked and no new entries can be appended to them. It is suggested that this process happens approximately <strong>once every three years</strong>, but again, it depends on the results of the HTTP/3 web traffic sampling.</t>
+      <t>
+      The intention is that any appending of new entries to the registry and/or the creation of a new QPACK Static Table registry will be accompanied by a published RFC. But in order to allow for the allocation of values prior to the RFC being approved for publication, the Designated Expert can undertake either action once it seems clear that an RFC will be published. The Designated expert will post a request to the HTTP WG mailing list (or a successor designated by the Area Director) for comment and review, including an Internet-Draft.</t>
+    </section>
+
+    <section anchor="Security">
+      <!-- All drafts are required to have a security considerations section. See RFC 3552 for a guide. -->
+      <name>Security Considerations</name>
+      <t>This document should not affect the security of the Internet.</t>
+    </section>
+
+  </middle>
+
+  <back>
+    <references>
+      <name>References</name>
+      <references>
+        <name>Normative References</name>
+
+        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.2119.xml"/>
+        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.8174.xml"/>
+        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.9204.xml"/>
+        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.8446.xml"/>
+        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.9110.xml"/>
+
+      </references>
+    </references>
+
+    <section anchor="Acknowledgements" numbered="false">
+      <name>Acknowledgements</name>
+      <t>Many thanks to Rich Salz and Mike Bishop at Akamai for their invaluable help.
+      </t>
+    </section>
+
+ </back>
+</rfc>
